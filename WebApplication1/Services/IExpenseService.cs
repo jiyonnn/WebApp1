@@ -1,15 +1,14 @@
-﻿using App1.Models;
-using System.Collections.Generic;
-using System.Threading.Tasks;
+using App1.Models;
+using App1.TransferObjects;
 
 namespace App1.Services
 {
     public interface IExpenseService
     {
-        Task<IEnumerable<Expense>> GetAllAsync();
-        Task<Expense> GetByIdAsync(int id);
-        Task<Expense> AddAsync(Expense expense);
-        Task<Expense> UpdateAsync(Expense expense);
-        Task<bool> DeleteAsync(int id);
+        Task<ServiceResult<IEnumerable<ExpenseModel>>> GetAllAsync();
+        Task<ServiceResult<ExpenseModel>> GetByIdAsync(int id);
+        Task<ServiceResult<ExpenseModel>> AddAsync(ExpenseModel expense);
+        Task<ServiceResult> UpdateAsync(int id, ExpenseModel expense);
+        Task<ServiceResult> DeleteAsync(int id);
     }
 }

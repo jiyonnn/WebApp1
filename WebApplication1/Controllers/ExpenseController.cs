@@ -1,8 +1,6 @@
-﻿using App1.Models;
 using App1.Services;
+using App1.TransferObjects;
 using Microsoft.AspNetCore.Mvc;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 
 namespace App1.Controllers
 {
@@ -17,38 +15,76 @@ namespace App1.Controllers
             _service = service;
         }
 
-        [HttpGet]
-        public async Task<IEnumerable<Expense>> Get() => await _service.GetAllAsync();
+        [HttpGet("list")]
+        public async Task<ActionResult<IEnumerable<ExpenseResponseDto>>> List()
+        {
+            var result = await _service.GetAllAsync();
+            return Ok(result.Data!.Select(expense => expense.ToResponseDto()));
+        }
 
         [HttpGet("{id}")]
-        public async Task<ActionResult<Expense>> Get(int id)
+        public async Task<ActionResult<ExpenseResponseDto>> Get(int id)
         {
-            var expense = await _service.GetByIdAsync(id);
-            if (expense == null) return NotFound();
-            return expense;
+            var result = await _service.GetByIdAsync(id);
+
+            if (!result.Success)
+            {
+                return NotFound(new ApiResponseDto
+                {
+                    Message = result.Message
+                });
+            }
+
+            return Ok(result.Data!.ToResponseDto());
         }
 
-        [HttpPost]
-        public async Task<ActionResult<Expense>> Post(Expense expense)
+        [HttpPost("create")]
+        public async Task<ActionResult<ApiResponseDto>> Post(CreateExpenseDto expense)
         {
-            var created = await _service.AddAsync(expense);
-            return CreatedAtAction(nameof(Get), new { id = created.Id }, created);
+            var result = await _service.AddAsync(expense.ToModel());
+
+            return Ok(new ApiResponseDto
+            {
+                Message = result.Message
+            });
         }
 
-        [HttpPut("{id}")]
-        public async Task<ActionResult<Expense>> Put(int id, Expense expense)
+        [HttpPut("update/{id}")]
+        public async Task<ActionResult<ApiResponseDto>> Put(int id, UpdateExpenseDto expense)
         {
-            if (id != expense.Id) return BadRequest();
-            var updated = await _service.UpdateAsync(expense);
-            return Ok(updated);
+            var result = await _service.UpdateAsync(id, expense.ToModel(id));
+
+            if (!result.Success)
+            {
+                return NotFound(new ApiResponseDto
+                {
+                    Message = result.Message
+                });
+            }
+
+            return Ok(new ApiResponseDto
+            {
+                Message = result.Message
+            });
         }
 
-        [HttpDelete("{id}")]
-        public async Task<ActionResult> Delete(int id)
+        [HttpDelete("delete/{id}")]
+        public async Task<ActionResult<ApiResponseDto>> Delete(int id)
         {
-            var deleted = await _service.DeleteAsync(id);
-            if (!deleted) return NotFound();
-            return NoContent();
+            var result = await _service.DeleteAsync(id);
+
+            if (!result.Success)
+            {
+                return NotFound(new ApiResponseDto
+                {
+                    Message = result.Message
+                });
+            }
+
+            return Ok(new ApiResponseDto
+            {
+                Message = result.Message
+            });
         }
     }
 }
