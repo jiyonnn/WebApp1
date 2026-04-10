@@ -16,7 +16,7 @@ namespace App1.Controllers
         }
 
         [HttpGet("list")]
-        public async Task<ActionResult<IEnumerable<ExpenseResponseDto>>> List()
+        public async Task<ActionResult> List()
         {
             var result = await _service.GetAllAsync();
             return Ok(result.Data!.Select(expense => expense.ToResponseDto()));
