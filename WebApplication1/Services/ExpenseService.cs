@@ -1,4 +1,5 @@
 using App1.Data;
+using App1.Entities;
 using App1.Models;
 using App1.TransferObjects;
 using Microsoft.EntityFrameworkCore;
@@ -7,6 +8,10 @@ namespace App1.Services
 {
     public class ExpenseService : IExpenseService
     {
+        private const string DefaultCreatedBy = "System";
+        private const string NotFoundMessage = "Expense not found.";
+        private const string UnexpectedErrorMessage = "An unexpected error occurred while processing the expense.";
+
         private readonly App1DbContext _context;
 
         public ExpenseService(App1DbContext context)
@@ -14,72 +19,123 @@ namespace App1.Services
             _context = context;
         }
 
+        // Methods
+        // Get all
         public async Task<ServiceResult<IEnumerable<ExpenseModel>>> GetAllAsync()
         {
-            var expenses = await _context.Expenses
-                .AsNoTracking()
-                .Select(expense => expense.ToModel())
-                .ToListAsync();
+            try
+            {
+                var expenses = await _context.Expenses
+                    .AsNoTracking()
+                    .Select(expense => expense.ToModel())
+                    .ToListAsync();
 
-            return ServiceResult<IEnumerable<ExpenseModel>>.SuccessResult(expenses, "Expenses retrieved successfully.");
+                return ServiceResult<IEnumerable<ExpenseModel>>.SuccessResult(expenses, "Expenses retrieved successfully.");
+            }
+            catch
+            {
+                return ServiceResult<IEnumerable<ExpenseModel>>.Failure(UnexpectedErrorMessage);
+            }
         }
 
+        //Get by id
         public async Task<ServiceResult<ExpenseModel>> GetByIdAsync(int id)
         {
-            var expense = await _context.Expenses.FindAsync(id);
-
-            if (expense == null)
+            try
             {
-                return ServiceResult<ExpenseModel>.Failure("Expense not found.");
-            }
+                var expense = await _context.Expenses.FindAsync(id);
 
-            return ServiceResult<ExpenseModel>.SuccessResult(expense.ToModel(), "Expense retrieved successfully.");
+                if (expense == null)
+                {
+                    return ServiceResult<ExpenseModel>.Failure(NotFoundMessage);
+                }
+
+                return ServiceResult<ExpenseModel>.SuccessResult(expense.ToModel(), "Expense retrieved successfully.");
+            }
+            catch
+            {
+                return ServiceResult<ExpenseModel>.Failure(UnexpectedErrorMessage);
+            }
         }
 
+        // Create
         public async Task<ServiceResult<ExpenseModel>> AddAsync(ExpenseModel expense)
         {
-            expense.CreatedDate = DateTime.UtcNow;
-            expense.CreatedBy = string.IsNullOrWhiteSpace(expense.CreatedBy) ? "System" : expense.CreatedBy;
+            try
+            {
+                PrepareNewExpense(expense);
+                var entity = expense.ToEntity();
 
-            var entity = expense.ToEntity();
+                _context.Expenses.Add(entity);
+                await _context.SaveChangesAsync();
 
-            _context.Expenses.Add(entity);
-            await _context.SaveChangesAsync();
-
-            return ServiceResult<ExpenseModel>.SuccessResult(entity.ToModel(), "Expense created successfully.");
+                return ServiceResult<ExpenseModel>.SuccessResult(entity.ToModel(), "Expense created successfully.");
+            }
+            catch
+            {
+                return ServiceResult<ExpenseModel>.Failure(UnexpectedErrorMessage);
+            }
         }
 
+        // Update
         public async Task<ServiceResult> UpdateAsync(int id, ExpenseModel expense)
         {
-            var existingExpense = await _context.Expenses.FindAsync(id);
-
-            if (existingExpense == null)
+            try
             {
-                return ServiceResult.Failure("Expense not found.");
+                var existingExpense = await _context.Expenses.FindAsync(id);
+
+                if (existingExpense == null)
+                {
+                    return ServiceResult.Failure(NotFoundMessage);
+                }
+
+                MapExpenseForUpdate(existingExpense, expense);
+                await _context.SaveChangesAsync();
+
+                return ServiceResult.SuccessResult("Expense updated successfully.");
             }
-
-            existingExpense.Code = expense.Code;
-            existingExpense.Description = expense.Description;
-            existingExpense.Amount = expense.Amount;
-
-            await _context.SaveChangesAsync();
-
-            return ServiceResult.SuccessResult("Expense updated successfully.");
+            catch
+            {
+                return ServiceResult.Failure(UnexpectedErrorMessage);
+            }
         }
 
+        // Delete
         public async Task<ServiceResult> DeleteAsync(int id)
         {
-            var expense = await _context.Expenses.FindAsync(id);
-
-            if (expense == null)
+            try
             {
-                return ServiceResult.Failure("Expense not found.");
+                var expense = await _context.Expenses.FindAsync(id);
+
+                if (expense == null)
+                {
+                    return ServiceResult.Failure(NotFoundMessage);
+                }
+
+                _context.Expenses.Remove(expense);
+                await _context.SaveChangesAsync();
+
+                return ServiceResult.SuccessResult("Expense deleted successfully.");
             }
+            catch
+            {
+                return ServiceResult.Failure(UnexpectedErrorMessage);
+            }
+        }
 
-            _context.Expenses.Remove(expense);
-            await _context.SaveChangesAsync();
+        private static void PrepareNewExpense(ExpenseModel expense)
+        {
+            expense.CreatedDate = DateTime.UtcNow;
+            expense.CreatedBy = string.IsNullOrWhiteSpace(expense.CreatedBy)
+                ? DefaultCreatedBy
+                : expense.CreatedBy;
+        }
 
-            return ServiceResult.SuccessResult("Expense deleted successfully.");
+        private static void MapExpenseForUpdate(Expense entity, ExpenseModel expense)
+        {
+            entity.Code = expense.Code;
+            entity.Description = expense.Description;
+            entity.Amount = expense.Amount;
         }
     }
 }
