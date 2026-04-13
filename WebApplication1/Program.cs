@@ -1,11 +1,62 @@
 using App1.Data;
 using App1.Services;
 using Microsoft.Data.SqlClient;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
+builder.Services.Configure<ApiBehaviorOptions>(options =>
+{
+    options.InvalidModelStateResponseFactory = context =>
+    {
+        var amountTypeError = context.ModelState
+            .Where(entry => entry.Key.Contains("Amount", StringComparison.OrdinalIgnoreCase))
+            .SelectMany(entry => entry.Value?.Errors ?? [])
+            .FirstOrDefault(error =>
+                !string.IsNullOrWhiteSpace(error.ErrorMessage) ||
+                error.Exception is not null);
+
+        var descriptionLengthError = context.ModelState
+            .Where(entry => entry.Key.Contains("Description", StringComparison.OrdinalIgnoreCase))
+            .SelectMany(entry => entry.Value?.Errors ?? [])
+            .Select(error => error.ErrorMessage)
+            .FirstOrDefault(message => message == "Description cannot exceed 200 characters.");
+
+        if (amountTypeError is not null && !string.IsNullOrWhiteSpace(descriptionLengthError))
+        {
+            return new BadRequestObjectResult(new
+            {
+                Message = "Amount must be a valid number and description cannot exceed 200 characters."
+            });
+        }
+
+        if (amountTypeError is not null)
+        {
+            return new BadRequestObjectResult(new
+            {
+                Message = "Amount must be a valid number."
+            });
+        }
+
+        var validationMessages = context.ModelState
+            .SelectMany(entry => entry.Value?.Errors ?? [])
+            .Select(error => error.ErrorMessage)
+            .Where(message => !string.IsNullOrWhiteSpace(message))
+            .Distinct()
+            .ToList();
+
+        var message = validationMessages.Count == 0
+            ? "Invalid request."
+            : string.Join(" ", validationMessages);
+
+        return new BadRequestObjectResult(new
+        {
+            Message = message
+        });
+    };
+});
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 

@@ -5,7 +5,7 @@ namespace App1.Services
 {
     public interface IExpenseService
     {
-        Task<ServiceResult<IEnumerable<ExpenseModel>>> GetAllAsync();
+        Task<ServiceResult<IEnumerable<ExpenseModel>>> GetAllAsync(string? search = null, string? code = null, string? description = null);
         Task<ServiceResult<ExpenseModel>> GetByIdAsync(int id);
         Task<ServiceResult<ExpenseModel>> AddAsync(ExpenseModel expense);
         Task<ServiceResult> UpdateAsync(int id, ExpenseModel expense);

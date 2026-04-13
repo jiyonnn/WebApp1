@@ -1,9 +1,10 @@
 using App1.Entities;
 using App1.Models;
+using App1.TransferObjects;
 
-namespace App1.TransferObjects
+namespace App1.Mappers
 {
-    public static class ExpenseMapper
+    public static class ExpenseMappingExtensions
     {
         public static ExpenseModel ToModel(this Expense expense)
         {

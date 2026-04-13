@@ -1,7 +1,7 @@
 using App1.Data;
 using App1.Entities;
+using App1.Mappers;
 using App1.Models;
-using App1.TransferObjects;
 using Microsoft.EntityFrameworkCore;
 
 namespace App1.Services
@@ -21,20 +21,52 @@ namespace App1.Services
 
         // Methods
         // Get all
-        public async Task<ServiceResult<IEnumerable<ExpenseModel>>> GetAllAsync()
+        public async Task<ServiceResult<IEnumerable<ExpenseModel>>> GetAllAsync(string? search = null, string? code = null, string? description = null)
         {
             try
             {
-                var expenses = await _context.Expenses
+                var query = _context.Expenses
                     .AsNoTracking()
+                    .AsQueryable();
+
+                if (!string.IsNullOrWhiteSpace(search))
+                {
+                    var trimmedSearch = search.Trim();
+                    query = query.Where(expense =>
+                        expense.Code.Contains(trimmedSearch) ||
+                        expense.Description.Contains(trimmedSearch));
+                }
+
+                if (!string.IsNullOrWhiteSpace(code))
+                {
+                    var trimmedCode = code.Trim();
+                    query = query.Where(expense => expense.Code.Contains(trimmedCode));
+                }
+
+                if (!string.IsNullOrWhiteSpace(description))
+                {
+                    var trimmedDescription = description.Trim();
+                    query = query.Where(expense => expense.Description.Contains(trimmedDescription));
+                }
+
+                var expenses = await query
                     .Select(expense => expense.ToModel())
                     .ToListAsync();
 
-                return ServiceResult<IEnumerable<ExpenseModel>>.SuccessResult(expenses, "Expenses retrieved successfully.");
+                return new ServiceResult<IEnumerable<ExpenseModel>>
+                {
+                    Success = true,
+                    Message = "Expenses retrieved successfully.",
+                    Data = expenses
+                };
             }
             catch
             {
-                return ServiceResult<IEnumerable<ExpenseModel>>.Failure(UnexpectedErrorMessage);
+                return new ServiceResult<IEnumerable<ExpenseModel>>
+                {
+                    Success = false,
+                    Message = UnexpectedErrorMessage
+                };
             }
         }
 
@@ -47,14 +79,27 @@ namespace App1.Services
 
                 if (expense == null)
                 {
-                    return ServiceResult<ExpenseModel>.Failure(NotFoundMessage);
+                    return new ServiceResult<ExpenseModel>
+                    {
+                        Success = false,
+                        Message = NotFoundMessage
+                    };
                 }
 
-                return ServiceResult<ExpenseModel>.SuccessResult(expense.ToModel(), "Expense retrieved successfully.");
+                return new ServiceResult<ExpenseModel>
+                {
+                    Success = true,
+                    Message = "Expense retrieved successfully.",
+                    Data = expense.ToModel()
+                };
             }
             catch
             {
-                return ServiceResult<ExpenseModel>.Failure(UnexpectedErrorMessage);
+                return new ServiceResult<ExpenseModel>
+                {
+                    Success = false,
+                    Message = UnexpectedErrorMessage
+                };
             }
         }
 
@@ -63,17 +108,37 @@ namespace App1.Services
         {
             try
             {
+                var validationMessage = ValidateExpense(expense);
+
+                if (!string.IsNullOrWhiteSpace(validationMessage))
+                {
+                    return new ServiceResult<ExpenseModel>
+                    {
+                        Success = false,
+                        Message = validationMessage
+                    };
+                }
+
                 PrepareNewExpense(expense);
                 var entity = expense.ToEntity();
 
                 _context.Expenses.Add(entity);
                 await _context.SaveChangesAsync();
 
-                return ServiceResult<ExpenseModel>.SuccessResult(entity.ToModel(), "Expense created successfully.");
+                return new ServiceResult<ExpenseModel>
+                {
+                    Success = true,
+                    Message = "Expense created successfully.",
+                    Data = entity.ToModel()
+                };
             }
             catch
             {
-                return ServiceResult<ExpenseModel>.Failure(UnexpectedErrorMessage);
+                return new ServiceResult<ExpenseModel>
+                {
+                    Success = false,
+                    Message = UnexpectedErrorMessage
+                };
             }
         }
 
@@ -82,21 +147,44 @@ namespace App1.Services
         {
             try
             {
+                var validationMessage = ValidateExpense(expense);
+
+                if (!string.IsNullOrWhiteSpace(validationMessage))
+                {
+                    return new ServiceResult
+                    {
+                        Success = false,
+                        Message = validationMessage
+                    };
+                }
+
                 var existingExpense = await _context.Expenses.FindAsync(id);
 
                 if (existingExpense == null)
                 {
-                    return ServiceResult.Failure(NotFoundMessage);
+                    return new ServiceResult
+                    {
+                        Success = false,
+                        Message = NotFoundMessage
+                    };
                 }
 
                 MapExpenseForUpdate(existingExpense, expense);
                 await _context.SaveChangesAsync();
 
-                return ServiceResult.SuccessResult("Expense updated successfully.");
+                return new ServiceResult
+                {
+                    Success = true,
+                    Message = "Expense updated successfully."
+                };
             }
             catch
             {
-                return ServiceResult.Failure(UnexpectedErrorMessage);
+                return new ServiceResult
+                {
+                    Success = false,
+                    Message = UnexpectedErrorMessage
+                };
             }
         }
 
@@ -109,17 +197,29 @@ namespace App1.Services
 
                 if (expense == null)
                 {
-                    return ServiceResult.Failure(NotFoundMessage);
+                    return new ServiceResult
+                    {
+                        Success = false,
+                        Message = NotFoundMessage
+                    };
                 }
 
                 _context.Expenses.Remove(expense);
                 await _context.SaveChangesAsync();
 
-                return ServiceResult.SuccessResult("Expense deleted successfully.");
+                return new ServiceResult
+                {
+                    Success = true,
+                    Message = "Expense deleted successfully."
+                };
             }
             catch
             {
-                return ServiceResult.Failure(UnexpectedErrorMessage);
+                return new ServiceResult
+                {
+                    Success = false,
+                    Message = UnexpectedErrorMessage
+                };
             }
         }
 
@@ -136,6 +236,46 @@ namespace App1.Services
             entity.Code = expense.Code;
             entity.Description = expense.Description;
             entity.Amount = expense.Amount;
+        }
+
+        private static string? ValidateExpense(ExpenseModel expense)
+        {
+            if (string.IsNullOrWhiteSpace(expense.Code))
+            {
+                return "Code is required.";
+            }
+
+            if (expense.Code.Length > 10)
+            {
+                return "Code must not exceed 10 characters.";
+            }
+
+            if (string.IsNullOrWhiteSpace(expense.Description))
+            {
+                return "Description is required.";
+            }
+
+            if (expense.Description.Length > 200)
+            {
+                return "Description must not exceed 200 characters.";
+            }
+
+            if (expense.Amount <= 0)
+            {
+                return "Amount must be greater than 0.";
+            }
+
+            if (expense.Amount > 9999999999999999.99m)
+            {
+                return "Amount must not exceed 9999999999999999.99.";
+            }
+
+            if (decimal.Round(expense.Amount, 2) != expense.Amount)
+            {
+                return "Amount must have no more than 2 decimal places.";
+            }
+
+            return null;
         }
     }
 }
